@@ -98,3 +98,95 @@ Endpoint 3: Get Unread Notification Count - Provides an ultra-fast lookup for UI
 
     HTTP event: notification
     data: {"id": "notif_778899", "title": "End Semester Results Declared", "message": "The results for the 6th Semester B.Tech exams are now active on the portal.", "category": "RESULT", "createdAt": "2026-05-16T12:00:00Z"}
+
+
+
+
+# Stage 2
+Database Design, Scalability Strategy & Access Queries
+
+For the campus notification microservice, **PostgreSQL (Relational Database Management System)** is chosen as the primary persistent storage. 
+
+### Reasons for choosing PostgreSQL
+ACID Compliance: Transactions (like marking a notification as read while concurrently adding a new one) require strict isolation to prevent race conditions or data discrepancy.
+
+Efficient Indexing and Relational Integrity: We have a strong structural relationship between a user (student) and their notifications. PostgreSQL handles join operations, foreign keys, and indexes (`B-Tree` and `BRIN`) exceptionally well.
+
+JSONB Support: Notifications often carry dynamic, category-specific metadata (e.g., event venue, placement deadline links, or result marks links). PostgreSQL’s `JSONB` column type allows us to store and index semi-structured data without losing relational integrity.
+
+Scale-Out and Read Replicas: Since a notification system is read-heavy (students constantly checking alerts), PostgreSQL allows us to scale horizontally using read-replicas.
+
+
+
+
+## 2. Database Schema Design
+
+We will use two core tables: `users` (as a reference point for authentication/targeting) and `notifications`. To handle the scale of individual read statuses efficiently without bloating a join table unnecessarily, we use an array-based or multi-row schema. For standard relational robustness at scale, a specialized junction/state architecture is best.
+
+### Database Schema DDL
+-- 1. Users Table (Core Reference)
+CREATE TABLE users (
+    user_id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    role VARCHAR(20) DEFAULT 'STUDENT', -- STUDENT, COORDINATOR, ADMIN
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Notifications Table
+CREATE TYPE notification_category AS ENUM ('PLACEMENT', 'EVENT', 'RESULT');
+
+CREATE TABLE notifications (
+    id VARCHAR(50) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    category notification_category NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    metadata JSONB -- Dynamic contextual data like links, dates, etc.
+);
+
+-- 3. User Notification State Table (Tracks delivery and read status per user)
+CREATE TABLE user_notifications (
+    user_id VARCHAR(50) REFERENCES users(user_id) ON DELETE CASCADE,
+    notification_id VARCHAR(50) REFERENCES notifications(id) ON DELETE CASCADE,
+    is_read BOOLEAN DEFAULT FALSE,
+    read_at TIMESTAMP WITH TIME ZONE,
+    PRIMARY KEY (user_id, notification_id)
+);
+
+Challenges faced include Slowing Read Queries, High Write Contention for Massive broadcast operations (e.g., sending a single placement alert to 10,000 students at once) will spike disk I/O operations and locks. These can be overcome by database partitioning, caching and using message queues like Kafka.
+
+
+Fetch Notifications
+SELECT 
+    n.id, 
+    n.title, 
+    n.message, 
+    n.category, 
+    un.is_read AS "isRead", 
+    n.created_at AS "createdAt"
+FROM user_notifications un
+JOIN notifications n ON un.notification_id = n.id
+WHERE un.user_id = :userId 
+  AND n.category = 'PLACEMENT' -- Optional Category Filter
+ORDER BY n.created_at DESC
+LIMIT 10 OFFSET 0;
+
+Mark Notifications as Read
+UPDATE user_notifications
+SET 
+    is_read = TRUE,
+    read_at = CURRENT_TIMESTAMP
+WHERE user_id = :userId 
+  AND notification_id IN ('notif_987654321');
+
+Get Unread Notification Count
+SELECT 
+    COUNT(*) AS "unreadCount",
+    COUNT(CASE WHEN n.category = 'PLACEMENT' THEN 1 END) AS "PLACEMENT",
+    COUNT(CASE WHEN n.category = 'EVENT' THEN 1 END) AS "EVENT",
+    COUNT(CASE WHEN n.category = 'RESULT' THEN 1 END) AS "RESULT"
+FROM user_notifications un
+JOIN notifications n ON un.notification_id = n.id
+WHERE un.user_id = :userId 
+  AND un.is_read = FALSE;
