@@ -1,5 +1,7 @@
-const AUTH_API = 'http://4.2.24.186.213/evaluation-service/auth';
-const LOG_API = 'http://4.2.24.186.213/evaluation-service/logs';
+const axios = require('axios');
+
+const AUTH_API = 'http://4.224.186.213/evaluation-service/auth';
+const LOG_API = 'http://4.224.186.213/evaluation-service/logs';
 
 const AUTH_CRED = {
     email: "aarthi.22mic7089@vitapstudent.ac.in",
@@ -21,21 +23,17 @@ async function getAuthToken() {
     }
 
     try {
-        const response = await fetch(AUTH_API, {
-            method: 'POST',
+        const targetUrl = new URL(AUTH_API.trim());
+        const response = await axios.post(AUTH_API, AUTH_CRED, {
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(AUTH_CRED)
+            timeout: 5000 
         });
 
-        if (!response.ok) {
-            throw new Error(`Authentication failed: ${response.status}`);
-        }
-
-        const data = await response.json();
+        const data = await response.data;
         
-        cachedToken = data.token;
+        cachedToken = data.access_token;
         
-        const expiresInSeconds = data.expiresIn || 3600; 
+        const expiresInSeconds = data.expires_in || 3600; 
         tokenExpiresAt = Date.now() + (expiresInSeconds * 1000);
 
         return cachedToken;
@@ -50,7 +48,7 @@ async function Log(stack, level, packageField, message) {
     const token = await getAuthToken();
     
     if (!token) {
-        console.error('[Logger Error] Skipping log transmission due to missing auth token.');
+        console.error('Skipping log transmission due to missing auth token.');
         return;
     }
 
@@ -62,18 +60,13 @@ async function Log(stack, level, packageField, message) {
     };
 
     try {
-        const response = await fetch(LOG_API, {
-            method: 'POST',
-            headers: {
+        const response = await axios.post(LOG_API, payload, {
+            headers: { 
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(payload)
+             },
+            timeout: 5000 
         });
-
-        if (!response.ok) {
-            console.error(`Failed to send log. Status: ${response.status}`);
-        }
     } catch (error) {
         console.error('Connection to log server failed:', error.message);
     }
