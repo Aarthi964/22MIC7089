@@ -203,3 +203,7 @@ FROM user_notifications un
 JOIN notifications n ON un.notification_id = n.id
 WHERE n.notificationType = 'Placement'
   AND n.created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days';
+
+
+# Stage 4
+Fetching unread notifications on every page load is costly. Using caching for user notifications can be a solution. But for sometime the data will be stale. Immediate notifications won't be sent. Another solution can be read replicas by using Master-Slave architecture for database where we have multiple read replicas with one or fewer write DBs.
