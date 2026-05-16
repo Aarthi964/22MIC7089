@@ -190,3 +190,16 @@ FROM user_notifications un
 JOIN notifications n ON un.notification_id = n.id
 WHERE un.user_id = :userId 
   AND un.is_read = FALSE;
+
+
+
+# Stage 3
+The original query is not efficient. Without a composite index matching the target filter criteria, the database will scan all 5,000,000 rows to find records matching `studentID = 1042` and `isRead = false`. The query has `ORDER BY createdAt DESC`. Without an index, the database must load the matching rows into memory and perform sorting before returning data. Fetching all columns unnecessarily increases network payload sizes. A composite index covering (studentID, isRead, createdAt DESC) must be added.
+
+Query for fetching users who received placement notification in previous 7 days. This is based on the above mentioned schema:
+
+SELECT DISTINCT un.user_id AS "studentID"
+FROM user_notifications un
+JOIN notifications n ON un.notification_id = n.id
+WHERE n.notificationType = 'Placement'
+  AND n.created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days';
