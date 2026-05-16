@@ -207,3 +207,7 @@ WHERE n.notificationType = 'Placement'
 
 # Stage 4
 Fetching unread notifications on every page load is costly. Using caching for user notifications can be a solution. But for sometime the data will be stale. Immediate notifications won't be sent. Another solution can be read replicas by using Master-Slave architecture for database where we have multiple read replicas with one or fewer write DBs.
+
+
+# Stage 5
+For notifying 50000 students a placement notification, it is better to decouple databse operation and sending email as sending email is a third party thing and might take a lot of time. once the database operation is done, we can use messaging queues and publish the emails to the queue and multiple workers concurrently send emails. If in case sending some emails fail it retries 3 times and drops in dead queue. This way the HR can send notification and the UI will be free in a lot less time.
