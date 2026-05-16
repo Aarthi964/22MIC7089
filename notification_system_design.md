@@ -211,3 +211,7 @@ Fetching unread notifications on every page load is costly. Using caching for us
 
 # Stage 5
 For notifying 50000 students a placement notification, it is better to decouple databse operation and sending email as sending email is a third party thing and might take a lot of time. once the database operation is done, we can use messaging queues and publish the emails to the queue and multiple workers concurrently send emails. If in case sending some emails fail it retries 3 times and drops in dead queue. This way the HR can send notification and the UI will be free in a lot less time.
+
+
+# Stage 6
+Translates custom string dates (`YYYY-MM-DD HH:MM:SS`) cleanly into monotonic Unix millisecond scales via standard JavaScript ISO `Date.getTime()` mutations to perform algorithmic ranking math accurately.
